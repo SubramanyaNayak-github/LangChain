@@ -423,44 +423,50 @@ Then we can build our index:
 > ```
 > from langchain_community.vectorstores import FAISS
 > from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+
+> text_splitter = RecursiveCharacterTextSplitter()
+> documents = text_splitter.split_documents(docs)
+> vector = FAISS.from_documents(documents, embeddings)
 > ```
 
-text_splitter = RecursiveCharacterTextSplitter()
-documents = text_splitter.split_documents(docs)
-vector = FAISS.from_documents(documents, embeddings)
 
 Now that we have this data indexed in a vectorstore, we will create a retrieval chain. This chain will take an incoming question, look up relevant documents, then pass those documents along with the original question into an LLM and ask it to answer the original question.
 
 First, let's set up the chain that takes a question and the retrieved documents and generates an answer.
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
 
-prompt = ChatPromptTemplate.from_template("""Answer the following question based only on the provided context:
+> ```
+> from langchain.chains.combine_documents import create_stuff_documents_chain
 
-<context>
-{context}
-</context>
+> prompt = ChatPromptTemplate.from_template("""Answer the following question based only on the provided context:
 
-Question: {input}""")
+> <context>
+> {context}
+> </context>
 
-document_chain = create_stuff_documents_chain(llm, prompt)
+> Question: {input}""")
 
+> document_chain = create_stuff_documents_chain(llm, prompt)
+> ```
 
 If we wanted to, we could run this ourselves by passing in documents directly:
-
+>```
 from langchain_core.documents import Document
 
 document_chain.invoke({
     "input": "how can langsmith help with testing?",
     "context": [Document(page_content="langsmith can let you visualize test results")]
 })
+>```
 
 However, we want the documents to first come from the retriever we just set up. That way, for a given question we can use the retriever to dynamically select the most relevant documents and pass those in.
-
+>```
 from langchain.chains import create_retrieval_chain
 
 retriever = vector.as_retriever()
 retrieval_chain = create_retrieval_chain(retriever, document_chain)
+>```
 
 We can now invoke this chain. This returns a dictionary - the response from the LLM is in the answer key
 
@@ -484,22 +490,23 @@ The final LLM chain should likewise take the whole history into account
 Updating Retrieval
 
 In order to update retrieval, we will create a new chain. This chain will take in the most recent input (input) and the conversation history (chat_history) and use an LLM to generate a search query.
-
+>```
 from langchain.chains import create_history_aware_retriever
 from langchain_core.prompts import MessagesPlaceholder
+>```
 
 # First we need a prompt that we can pass into an LLM to generate this search query
-
+>```
 prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name="chat_history"),
     ("user", "{input}"),
     ("user", "Given the above conversation, generate a search query to look up in order to get information relevant to the conversation")
 ])
 retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
-
+>```
 
 We can test this out by passing in an instance where the user is asking a follow up question.
-
+>```
 from langchain_core.messages import HumanMessage, AIMessage
 
 chat_history = [HumanMessage(content="Can LangSmith help test my LLM applications?"), AIMessage(content="Yes!")]
@@ -507,12 +514,12 @@ retriever_chain.invoke({
     "chat_history": chat_history,
     "input": "Tell me how"
 })
-
+>```
 
 You should see that this returns documents about testing in LangSmith. This is because the LLM generated a new query, combining the chat history with the follow up question.
 
 Now that we have this new retriever, we can create a new chain to continue the conversation with these retrieved documents in mind.
-
+>```
 prompt = ChatPromptTemplate.from_messages([
     ("system", "Answer the user's questions based on the below context:\n\n{context}"),
     MessagesPlaceholder(variable_name="chat_history"),
@@ -521,16 +528,16 @@ prompt = ChatPromptTemplate.from_messages([
 document_chain = create_stuff_documents_chain(llm, prompt)
 
 retrieval_chain = create_retrieval_chain(retriever_chain, document_chain)
-
+>```
 
 We can now test this out end-to-end:
-
+>```
 chat_history = [HumanMessage(content="Can LangSmith help test my LLM applications?"), AIMessage(content="Yes!")]
 retrieval_chain.invoke({
     "chat_history": chat_history,
     "input": "Tell me how"
 })
-
+>```
 
 We can see that this gives a coherent answer - we've successfully turned our retrieval chain into a chatbot!
 
@@ -544,7 +551,7 @@ One of the first things to do when building an agent is to decide what tools it 
 The retriever we just created. This will let it easily answer questions about LangSmith
 A search tool. This will let it easily answer questions that require up to date information.
 First, let's set up a tool for the retriever we just created:
-
+>```
 from langchain.tools.retriever import create_retriever_tool
 
 retriever_tool = create_retriever_tool(
@@ -552,35 +559,37 @@ retriever_tool = create_retriever_tool(
     "langsmith_search",
     "Search for information about LangSmith. For any questions about LangSmith, you must use this tool!",
 )
-
+>```
 
 The search tool that we will use is Tavily. This will require an API key (they have generous free tier). After creating it on their platform, you need to set it as an environment variable:
-
+>```
 export TAVILY_API_KEY=...
+>```
 
 If you do not want to set up an API key, you can skip creating this tool.
-
+>```
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 search = TavilySearchResults()
+>```
 
 We can now create a list of the tools we want to work with:
-
+>```
 tools = [retriever_tool, search]
-
+>```
 Now that we have the tools, we can create an agent to use them. We will go over this pretty quickly - for a deeper dive into what exactly is going on, check out the Agent's Getting Started documentation
 
 Install langchain hub first
-
+>```
 pip install langchainhub
-
+>```
 Now we can use it to get a predefined prompt
-
+>```
 from langchain_openai import ChatOpenAI
 from langchain import hub
 from langchain.agents import create_openai_functions_agent
 from langchain.agents import AgentExecutor
-
+>```
 # Get the prompt to use - you can modify this!
 prompt = hub.pull("hwchase17/openai-functions-agent")
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
@@ -592,16 +601,18 @@ We can now invoke the agent and see how it responds! We can ask it questions abo
 agent_executor.invoke({"input": "how can langsmith help with testing?"})
 
 We can ask it about the weather:
-
+>```
 agent_executor.invoke({"input": "what is the weather in SF?"})
-
+>```
 We can have conversations with it:
 
+>```
 chat_history = [HumanMessage(content="Can LangSmith help test my LLM applications?"), AIMessage(content="Yes!")]
 agent_executor.invoke({
     "chat_history": chat_history,
     "input": "Tell me how"
 })
+>```
 
 
 Diving Deeper
@@ -613,8 +624,9 @@ Now that we've built an application, we need to serve it. That's where LangServe
 While the first part of this guide was intended to be run in a Jupyter Notebook, we will now move out of that. We will be creating a Python file and then interacting with it from the command line.
 
 Install with:
-
+>```
 pip install "langserve[all]"
+>```
 
 Server
 To create a server for our application we'll make a serve.py file. This will contain our logic for serving our application. It consists of three things:
@@ -623,6 +635,8 @@ The definition of our chain that we just built above
 Our FastAPI app
 A definition of a route from which to serve the chain, which is done with langserve.add_routes
 #!/usr/bin/env python
+
+>```
 from typing import List
 
 from fastapi import FastAPI
@@ -641,8 +655,11 @@ from langchain.agents import AgentExecutor
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from langserve import add_routes
+>```
+
 
 # 1. Load Retriever
+>```
 loader = WebBaseLoader("https://docs.smith.langchain.com/overview")
 docs = loader.load()
 text_splitter = RecursiveCharacterTextSplitter()
@@ -650,8 +667,10 @@ documents = text_splitter.split_documents(docs)
 embeddings = OpenAIEmbeddings()
 vector = FAISS.from_documents(documents, embeddings)
 retriever = vector.as_retriever()
+>```
 
 # 2. Create Tools
+>```
 retriever_tool = create_retriever_tool(
     retriever,
     "langsmith_search",
@@ -659,26 +678,30 @@ retriever_tool = create_retriever_tool(
 )
 search = TavilySearchResults()
 tools = [retriever_tool, search]
-
+>```
 
 # 3. Create Agent
+>```
 prompt = hub.pull("hwchase17/openai-functions-agent")
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
 agent = create_openai_functions_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-
+>```
 
 # 4. App definition
+>```
 app = FastAPI(
   title="LangChain Server",
   version="1.0",
   description="A simple API server using LangChain's Runnable interfaces",
 )
-
+>```
 # 5. Adding chain route
 
 # We need to add these input/output schemas because the current AgentExecutor
 # is lacking in schemas.
+
+>```
 
 class Input(BaseModel):
     input: str
@@ -702,6 +725,7 @@ if __name__ == "__main__":
 
     uvicorn.run(app, host="localhost", port=8000)
 
+>```
 
 And that's it! If we execute this file:
 
@@ -714,7 +738,7 @@ Every LangServe service comes with a simple built-in UI for configuring and invo
 
 Client
 Now let's set up a client for programmatically interacting with our service. We can easily do this with the [langserve.RemoteRunnable](/docs/langserve#client). Using this, we can interact with the served chain as if it were running client-side.
-
+>```
 from langserve import RemoteRunnable
 
 remote_chain = RemoteRunnable("http://localhost:8000/agent/")
@@ -722,7 +746,7 @@ remote_chain.invoke({
     "input": "how can langsmith help with testing?",
     "chat_history": []  # Providing an empty list as this is the first call
 })
-
+>```
 To learn more about the many other features of LangServe head here.
 
 Next steps
