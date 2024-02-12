@@ -1,3 +1,5 @@
+### Demo Application 
+
 ## To integrate with openai api
 
 import os
@@ -19,7 +21,7 @@ st.title('LangChain & OpenAI Api Demo application')
 input_text = st.text_input('Search the topic u want')
 
 
-llm=OpenAI(tempurature=0.9)
+llm=OpenAI(temperature=0.9)
 
 
 

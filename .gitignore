@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 lang/*
 .env/*
+constant.py
